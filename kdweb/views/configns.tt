@@ -1,0 +1,12 @@
+<form action="<% uri_base %>configure/updatens" method="POST">
+<table class="kv">
+<input type="hidden" name="id" value="<% ns.id %>" />
+<tbody>
+<tr><td>Hostname:</td><td><input type="text" name="hostname" value="<% ns.hostname %>" /></td></tr>
+<tr><td>Dsn:</td><td><input type="text" name="dsn" value="<% ns.dsn %>" /></td></tr>
+<tr><td>Username:</td><td><input type="text" name="username" value="<% ns.username %>" /></td></tr>
+<tr><td>Password:</td><td><input type="password" name="password" /></td></tr>
+</tbody>
+</table>
+<input type="submit" value="Update Nameserver" />
+</form>

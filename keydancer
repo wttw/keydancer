@@ -1,0 +1,397 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use DBI;
+use Getopt::Long;
+use Pod::Usage;
+use Net::Domain qw(hostfqdn);
+use YAML::Any;
+use FindBin;
+use Proc::PID::File;
+use Sys::Syslog;
+use Proc::Daemon;
+use POSIX;
+use Config;
+use lib "$FindBin::Bin/kdweb/lib";
+use KeyDancer;
+
+sub mylog($ );
+sub received_signal($ );
+
+my $myname = 'keydancer';
+my $version = 1;
+my $dbversion = 1;
+
+my $opt_init;
+my $opt_help;
+my $opt_man;
+my $opt_version;
+my $opt_list;
+my $opt_maintain;
+my $opt_daemon;
+my $opt_stop;
+my $opt_status;
+my $opt_webserver;
+my $privatekey;
+
+my $default_dbuser = '';
+my $default_dbpass = '';
+my $default_dbstring = '';
+my $default_lockdir = '/tmp';
+
+my $dbuser;
+my $dbpass;
+my $dbstring;
+my $default_config = $FindBin::Bin . '/kdweb/config.yml';
+my $config;
+my $fqdn;
+my $domain;
+my $get;
+my $selector;
+my $lockdir;
+my $syslog_facility = 'user';
+my @signame;
+my $dbh;
+
+{
+    if(defined $Config{sig_name}) {
+	my $i=0;
+	foreach my $name (split(' ', $Config{sig_name})) {
+	    $signame[$i] = $name;
+	    $i++;
+	}
+    }
+    $SIG{INT} = \&received_signal;
+    $SIG{QUIT} = \&received_signal;
+    $SIG{TERM} = \&received_signal;
+}
+
+my $result = GetOptions('dbuser=s' => \$dbuser,
+			'dbpass=s' => \$dbpass,
+			'dbstring=s' => \$dbstring,
+			'config=s' => \$config,
+			'fqdn=s' => \$fqdn,
+			'domain=s' => \$domain,
+			'init' => \$opt_init,
+			'help' => \$opt_help,
+			'man' => \$opt_man,
+			'list' => \$opt_list,
+			'privatekey=s' => \$privatekey,
+			'get=s' => \$get,
+			'selector=s' => \$selector,
+			'maintain' => \$opt_maintain,
+			'lockdir=s' => \$lockdir,
+			'start' => \$opt_daemon,
+			'stop' => \$opt_stop,
+			'status' => \$opt_status,
+			'webserver' => \$opt_webserver,
+			'version' => \$opt_version
+    );
+
+pod2usage(-verbose => 1) if ($opt_help);
+pod2usage(-verbose => 2) if ($opt_man);
+
+if($opt_version) {
+    warn "$myname V$version\n";
+    exit 0;
+}
+
+if(defined $config && ! -r $config) {
+    die "Can't read configuration file '$config'\n";
+}
+
+$config = $default_config unless defined $config;
+
+if(-r $config) {
+    my $yaml = YAML::Any::LoadFile($config);
+    if(!defined $dbstring && exists $yaml->{plugins}->{Database}->{dsn}) {
+	$dbstring = $yaml->{plugins}->{Database}->{dsn};
+    }
+    if(!defined $dbuser && exists $yaml->{plugins}->{Database}->{username}) {
+	$dbuser = $yaml->{plugins}->{Database}->{username};
+    }
+    if(!defined $dbpass && exists $yaml->{plugins}->{Database}->{password}) {
+	$dbuser = $yaml->{plugins}->{Database}->{password};
+    }
+}
+
+$dbuser = $default_dbuser unless defined $dbuser;
+$dbpass = $default_dbpass unless defined $dbpass;
+$dbstring = $default_dbstring unless defined $dbstring;
+$lockdir = $default_lockdir unless defined $lockdir;
+
+my $pidfile = "$lockdir/$myname.pid";
+my $statusfile = "$lockdir/$myname.status";
+
+if($opt_webserver) {
+    { exec "$FindBin::Bin/kdweb/kdweb.pl" };
+    die "Failed to exec kdweb.pl: $!\n";
+    
+}
+
+if($opt_stop) {
+    unless(open IF, $pidfile) {
+	warn "$myname not running\n";
+	exit 0;
+    }
+    my $pid = <IF>;
+    chomp $pid;
+    die "Invalid PID in $pidfile - '$pid'\n" unless $pid =~ /^\d+\s*$/;
+    if(kill 'TERM', $pid) {
+	warn "Stopping $myname process pid $pid\n";
+	exit 0;
+    }
+    die "Failed to kill $myname process $pid\n";
+}
+
+
+if($opt_daemon) {
+    print "Spawning $myname daemon\n";
+    Proc::Daemon::Init;
+    openlog($myname, 'ndelay,nofatal,pid', $syslog_facility);
+}
+
+if($opt_status) {
+    unless(open IF, $pidfile) {
+	warn "$myname not running\n";
+	exit 0;
+    }
+    
+    my $pid = <IF>;
+    chomp $pid;
+    die "Invalid PID in $pidfile - '$pid'\n" unless $pid =~ /^\d+\s*$/;
+    
+    unless(kill 0, $pid) {
+	warn "$myname not running - stale lock file found\n";
+	exit 0;
+    }
+    warn "$myname running as PID $pid\n";
+    close IF;
+    if(open IF, $statusfile) {
+	my $msg = <IF>;
+	chomp $msg;
+	warn "  $msg\n";
+    }
+    exit 0;
+}
+
+
+eval {
+
+    $dbh = DBI->connect($dbstring, $dbuser, $dbpass, {RaiseError => 1, AutoCommit => 0});
+    
+    if(!$dbh) {
+	die "Failed to connect to database: $DBI::errstr\n";
+    }
+
+    my $schemaversion;
+    eval {
+	my ($sv) = $dbh->selectrow_array('select version from schema_version');
+	$schemaversion = $sv;
+    };
+    if($@) {
+	die "Failed to retrieve schema version from database: $@\n";
+    }
+    
+    if($schemaversion != $dbversion) {
+	die "Database is version $schemaversion, while this script is version $dbversion\n";
+    }
+    
+    $fqdn = hostfqdn() unless defined $fqdn;
+    
+    if($opt_init) {
+	unless(defined $fqdn) {
+	    die "I can't find the hostname of this machine, try --fqdn\n";
+	}
+	unless($fqdn =~ /^([a-z0-9-]+)\.([a-z0-9.-]+)$/i) {
+	    die "'$fqdn' isn't a fully qualified domain name, try --fqdn\n";
+	}
+	
+	$domain = $2 unless defined $domain;
+	
+	$domain = lc($domain);
+	
+	unless($domain =~ /^([a-z0-9-]+)\.([a-z0-9.-]+)$/i) {
+	    die "'$domain' doesn't have any dots in it, try --domain to set it\n";
+	}
+	my $sel1 = $1;
+	
+	$dbh->do('delete from defaults');
+	$dbh->do("insert into defaults (publifetime, privlifetime, selector1, cnamebase, webhost, ttl, keybits) values ('8 days', '28 days', ?, ?, ?, 86400, 1024)", {}, $sel1, "dkim.$domain", $fqdn);
+	$dbh->do('delete from nameservers');
+	$dbh->do('insert into nameservers (hostname) values (?)', {}, $fqdn);
+	$dbh->commit;
+	
+	print "Initialized database:\n  Primary selector: $sel1\n  CNAME base: dkim.$domain\n  Web interface: http://$fqdn/\n  Nameservers: $fqdn\n";
+	$dbh->disconnect;
+	exit 0;
+    }
+    
+    if($opt_list) {
+	my $getcusth = $dbh->prepare('select dom from customers order by dom');
+	$getcusth->execute();
+	while(my ($dom) = $getcusth->fetchrow_array) {
+	    print "$dom\n";
+	}
+	$dbh->disconnect;
+	exit 0;
+    }
+    
+    if($privatekey) {
+	my $getpkh = $dbh->prepare('select privkey from customers where dom=?');
+	$getpkh->execute($privatekey);
+	while(my ($pk) = $getpkh->fetchrow_array) {
+	    print $pk;
+	}
+	$dbh->disconnect;
+	exit 0;
+    }
+    
+    if($get) {
+	my $kd = KeyDancer->new;
+	$kd->connect($dbh);
+	my $pk = $kd->get_privatekey($get);
+	die "Failed to create $get\n" unless defined $pk;
+	print $pk;
+	$dbh->disconnect;
+	exit 0;
+    }
+    
+    if($selector) {
+	my $kd = KeyDancer->new;
+	$kd->connect($dbh);
+	my $sel = $kd->get_selector($selector);
+	die "Failed to create $get\n" unless defined $sel;
+	print "$sel\n";
+	$dbh->disconnect;
+	exit 0;
+    }
+    
+    if($opt_maintain) {
+	my $kd = KeyDancer->new;
+	$kd->connect($dbh);
+	$kd->maintain_keys();
+	$dbh->commit;
+	$dbh->disconnect;
+	exit 0;
+    }
+};
+if($@) {
+    my $err = $@;
+    if($dbh) {
+	$dbh->rollback;
+	$dbh->disconnect;
+    }
+    mylog($err);
+    die "$myname: $err\n";
+}
+
+sub mylog($ )
+{
+    my ($msg) = @_;
+    syslog('info', $msg) if $opt_daemon;
+    my $m = '[' . POSIX::strftime("%Y-%m-%d %H:%M:%S", localtime(time)) . '] ' . $msg;
+    if(defined $statusfile && open OF, '>', $statusfile) {
+	print OF "$m\n";
+	close OF;
+    } else {
+	warn "$m\n";
+    }
+}
+
+sub received_signal($ )
+{
+    my $sig = shift;
+    print "got sig\n";
+    die "Received SIG$sig, exiting\n";
+}
+
+
+__END__
+
+=head1 NAME
+
+keydancer - Manage a keydancer DKIM keyserver installation
+
+=head1 SYNOPSIS
+
+B<keydancer> [ --help --man --init --fqdn=<fqdn> --domain=<domain>
+               --config=<configfile> --webserver --lockdir
+               --start --stop --status --maintain
+               --list --privatekey=<domain> --get=<domain> --selector=<domain>
+               --dbuser=<dbuser> --dbpass=<dbpass> --dbstring=<dbstring> ]
+
+=head1 DESCRIPTION
+
+The B<keydancer> script manages a keydancer DKIM keyserver installation
+
+=over
+
+=item B<--config>
+
+Load configuration from yaml file
+
+=item B<--help>
+
+Display help on command options.
+
+=item B<--man>
+
+Display full documentation
+
+=item B<--init>
+
+Initialize database
+
+=item B<--fqdn>
+
+Use fqdn as the fully qualifed domain name of this machine when
+initializing database
+
+=item B<--dbstring> B<--dbuser> B<--dbpass>
+
+Connect to database using this DSN, username and password.
+
+=item B<--list>
+
+List configured domains.
+
+=item B<--privatekey>
+
+Show the private key for the given domain.
+
+=item B<--get>
+
+Show the private key for the given domain, creating it if needed.
+
+=item B<--selector>
+
+Show the selector for the given domain, creating it if needed
+
+=item B<--maintain>
+
+Run one update cycle
+
+=item B<--start>
+
+Run continuous updates
+
+=item B<--stop>
+
+Stop an existing process
+
+=item B<--status>
+
+Show status of running process
+
+=item B<--webserver>
+
+Run a management webserver, as configured by kdweb/config.yml and kdweb/environments/*
+
+This server has no access control and isn't intended for production use. The webapp
+can be run in many other ways (standalone, cgi, fastcgi, mod_perl, plack.
+See Dancer::Deployment.
+
+=back

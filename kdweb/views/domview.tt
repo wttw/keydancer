@@ -1,0 +1,31 @@
+<table class="kv">
+<tbody>
+<tr><td>Domain (DKIM d=):</td><td><% d.dom %></td></tr>
+<tr><td>Selector:</td><td><% d.selector2 %>.<% d.selector1 %></td></tr>
+<tr><td>Status:</td><td><img src="<% uri_base %>images/status_<% d.status %>.png" alt="<% d.status %>" />
+<% d.status %></td></tr>
+<tr><td>Rotation interval:</td><td><% d.privlifetime %></td></tr>
+<tr><td>Public key expiry:</td><td><% d.publifetime %></td></tr>
+<tr><td>Key strength:</td><td><% d.keybits %> bits</td></tr>
+<tr><td>Next rotation:</td><td><% d.privexpires %></td></tr>
+<tr><td>DNS name:</td><td><% d.selector2 %>.<%d.selector1 %>._domainkey.<% d.dom %></td></tr>
+<tr><td>DNS data:</td><td><% d.txtwrap %></td></tr>
+</tbody>
+</table>
+<h2>Customer delegation</h2>
+<h3>Bind format proper delegation</h3>
+<pre class="cnp">
+<%- FOREACH ns = nameservers -%>
+<% d.selector1 %>._domainkey.<% d.dom %>. IN NS 86400 <% ns %>
+<%- END -%>
+</pre>
+<h3>Bind format CNAME delegation</h3>
+<pre class="cnp">
+$GENERATE <% d.selector2 %>-<% d.selector2 + 120 %> $.<% d.selector1 %>._domainkey.<% d.dom %>. IN CNAME 86400 $.<% d.dom %>.<% d.cnamebase %>.
+</pre>
+<h3>Tinydns format proper delegation</h3>
+<pre class="cnp">
+<%- FOREACH ns = nameservers -%>
+&<% d.selector1 %>._domainkey.<% d.dom %>::<% ns %>:86400::
+<%- END -%>
+</pre>

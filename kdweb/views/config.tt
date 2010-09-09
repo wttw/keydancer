@@ -1,0 +1,35 @@
+<h2>Global Options</h2>
+<form action="<% uri_base %>configure/update" method="POST">
+<table class="kv">
+<tbody>
+<tr><td>Key rotation period:</td><td><input name="privlifetime" value="<% defaults.privlifetime %>" /></td></tr>
+<tr><td>Public key expiry:</td><td><input name="publifetime" value="<% defaults.publifetime %>" /></td></tr>
+<tr><td>Primary selector:</td><td><input name="selector1" value="<% defaults.selector1 %>" /></td></tr>
+<tr><td>CNAME base:</td><td><input name="cnamebase" value="<% defaults.cnamebase %>" /></td></tr>
+<tr><td>Server hostname:</td><td><input name="webhost" value="<% defaults.webhost %>" /></td></tr>
+<tr><td>DNS TTL (seconds):</td><td><input name="ttl" value="<% defaults.ttl %>" /></td></tr>
+<tr><td>Default key length:</td><td><input name="keybits" value="<% defaults.keybits %>" /></td></tr>
+</tbody>
+</table>
+<input type="submit" value="Update Configuration" />
+</form>
+<h2>Nameservers</h2>
+<table>
+<thead>
+<tr><th>Name</th><th>Database DSN</th><th>Database User</td></tr>
+</thead>
+<tbody>
+<% FOREACH ns = nameservers %>
+<tr><td><a href="<% uri_base %>configure/editns/<% ns.0 %>"><% ns.1 %></a></td><td><% ns.2 %></td><td><% ns.3 %></td></tr>
+<% END %>
+</tbody>
+</table>
+<p><a href="<% uri_base %>configure/addns">Add Nameserver</a></p>
+<h2>Database</h2>
+<table class="kv">
+<tbody>
+<tr><td>Connection string:</td><td>dbi:<% db.driver %>:<% db.name %></td></tr>
+<tr><td>Username:</td><td><% db.user %></td></tr>
+</tbody>
+</table>
+

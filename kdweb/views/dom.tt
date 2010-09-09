@@ -1,0 +1,29 @@
+<h2>Domains</h2>
+
+<h3>Add a domain</h3>
+<form action="<% uri_base %>domain/add" method="POST">
+<input name="domain" type="text" />
+<input type="submit" value="Add domain" />
+</form>
+
+<h3>Existing domains</h3>
+
+<% IF keys %>
+<p>baz</p>
+<p>Keys size = <% keys.size %></p>
+<p>boof</p>
+<p>
+<% FOREACH k = keys %>
+<a href="<% uri_base %>domain/list/<% k %>"><% k %></a>
+<% END %>
+</p>
+<% END %>
+
+<table>
+<% IF domains %>
+<% FOREACH d = domains %>
+<tr><td><img src="<% uri_base %>images/status_<% d.1 %>.png" alt="<% d.1 %>" /></td>
+<td><a href="<% uri_base %>domain/view/<% d.0 %>"><% d.0 %></a></td></tr>
+<% END %>
+<% END %>
+</table>

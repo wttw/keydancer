@@ -1,0 +1,62 @@
+body {
+    font-family: 100% verdana, arial, sans-serif;
+    background-color: #fff;
+    margin: 50px;
+}
+
+.kv tbody tr td:first-child {
+text-align: right;
+font-weight: bold;
+padding-right: 10px;
+}
+
+.kv tbody tr td {
+vertical-align: top;
+}
+
+pre.cnp {
+  margin: 9px;
+  border: 1px solid #66c;
+  background-color: #eee;
+  padding: 9px;
+}
+
+ul#tabnav {
+text-align: left;
+margin: 1em 0 1em 0;
+font: bold 11px verdana, arial, sans-serif;
+border-bottom: 1px solid #66c;
+list-style-type: none;
+padding: 3px 10px 3px 10px;
+}
+
+ul#tabnav li {
+display: inline;
+}
+
+body#tabhome li.tabhome, body#tabdom li.tabdom, body#tabconfig li.tabconfig, body#tabhelp li.tabhelp {
+border-bottom: 1px solid #fff;
+background-color: #fff;
+}
+
+body#tabhome li.tabhome a, body#tabdom li.tabdom a, body#tabconfig li.tabconfig a, body#tabhelp li.tabhelp a {
+background-color: #fff;
+color: #000;
+position: relative;
+top: 1px;
+padding-top: 4px;
+}
+
+ul#tabnav li a {
+padding: 3px 4px;
+border: 1px solid #66c;
+background-color: #ddf;
+color: #666;
+margin-right: 0px;
+text-decoration: none;
+border-bottom: none;
+}
+
+ul#tabnav a:hover {
+background: #fff;
+}

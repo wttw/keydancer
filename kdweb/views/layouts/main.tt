@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<title>KeyDancer</title>
+<link rel="stylesheet" href="<% uri_base %>css/style.css" />
+<meta charset=UTF-8" />
+</head>
+<body id="tab<% tab %>">
+<div id="container">
+<ul id="tabnav">
+<li class="tabhome"><a href="<% uri_base %>">Home</a></li>
+<li class="tabdom"><a href="<% uri_base %>domain/list">Domains</a></li>
+<li class="tabconfig"><a href="<% uri_base %>configure">Configure</a></li>
+<li class="tabhelp"><a href="<% uri_base %>help">Help</a></li>
+</ul>
+<div id="content">
+<% content %>
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,13 @@
+layout: "main"
+logger: "file"
+appname: "kdweb"
+template: template_toolkit
+plugins:
+  Database:
+    dsn: 'dbi:Pg:dbname=keydancer;host=localhost'
+    username: 'steve'
+    password: ''
+    connectivity-check-threshold: 10
+    dbi_params:
+      RaiseError: 1
+      AutoCommit: 0
